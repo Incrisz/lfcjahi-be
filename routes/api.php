@@ -5,7 +5,10 @@ use App\Http\Controllers\Api\Admin\CategoryController;
 use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\MediaItemController;
 use App\Http\Controllers\Api\Admin\ThemeSettingController;
+use App\Http\Controllers\Api\PublicMediaController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('media', [PublicMediaController::class, 'index']);
 
 Route::prefix('admin')->group(function (): void {
     Route::get('categories', [CategoryController::class, 'index']);
@@ -18,6 +21,7 @@ Route::prefix('admin')->group(function (): void {
     Route::delete('subcategories/{subcategory}', [CategoryController::class, 'destroySubcategory']);
 
     Route::apiResource('media', MediaItemController::class);
+    Route::patch('media/{id}/publish', [MediaItemController::class, 'updatePublishStatus']);
     Route::apiResource('events', EventController::class);
     Route::apiResource('blog-posts', BlogPostController::class);
 

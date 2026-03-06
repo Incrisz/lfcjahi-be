@@ -7,6 +7,7 @@ use App\Models\MediaSubcategory;
 use App\Models\MediaItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
@@ -35,6 +36,7 @@ class MediaItemController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $this->validatePayload($request);
+        $validated['is_published'] = (bool) ($validated['is_published'] ?? true);
 
         if ($request->hasFile('thumbnail_file')) {
             $path = $request->file('thumbnail_file')->store('media-thumbnails', 'public');
@@ -42,7 +44,8 @@ class MediaItemController extends Controller
         }
 
         if ($request->hasFile('audio_file')) {
-            $path = $request->file('audio_file')->store('media-audio', 'public');
+            $originalFilename = $this->safeAudioOriginalFilename($request->file('audio_file'));
+            $path = $request->file('audio_file')->storeAs('media-audio', $originalFilename, 'public');
             $validated['media_url'] = Storage::url($path);
             $validated['media_source_type'] = 'file';
         }
@@ -86,7 +89,8 @@ class MediaItemController extends Controller
 
         if ($request->hasFile('audio_file')) {
             $this->deleteManagedPublicFile($previousMediaUrl);
-            $path = $request->file('audio_file')->store('media-audio', 'public');
+            $originalFilename = $this->safeAudioOriginalFilename($request->file('audio_file'));
+            $path = $request->file('audio_file')->storeAs('media-audio', $originalFilename, 'public');
             $validated['media_url'] = Storage::url($path);
             $validated['media_source_type'] = 'file';
         } elseif (
@@ -97,6 +101,21 @@ class MediaItemController extends Controller
         }
 
         $item->fill($validated);
+        $item->save();
+
+        return response()->json([
+            'data' => $this->serializeItem($item),
+        ]);
+    }
+
+    public function updatePublishStatus(Request $request, string $id): JsonResponse
+    {
+        $item = MediaItem::query()->findOrFail($id);
+        $validated = $request->validate([
+            'is_published' => ['required', 'boolean'],
+        ]);
+
+        $item->is_published = (bool) $validated['is_published'];
         $item->save();
 
         return response()->json([
@@ -133,6 +152,7 @@ class MediaItemController extends Controller
             'thumbnail_url' => $request->input('thumbnail_url', $request->input('thumbnailUrl')),
             'media_url' => $request->input('media_url', $request->input('mediaUrl')),
             'media_source_type' => $request->input('media_source_type', $request->input('mediaSourceType')),
+            'is_published' => $request->input('is_published', $request->input('isPublished')),
         ]);
 
         $validated = $request->validate([
@@ -146,6 +166,7 @@ class MediaItemController extends Controller
             'thumbnail_file' => ['nullable', 'image', 'max:5120'],
             'media_url' => ['nullable', 'string', 'max:2048'],
             'media_source_type' => ['nullable', Rule::in(['link', 'file'])],
+            'is_published' => ['nullable', 'boolean'],
             'audio_file' => [
                 'nullable',
                 'file',
@@ -212,6 +233,7 @@ class MediaItemController extends Controller
             'thumbnailUrl' => $this->absoluteUrl($item->thumbnail_url),
             'mediaUrl' => $this->absoluteUrl($item->media_url),
             'mediaSourceType' => $item->media_source_type ?? '',
+            'isPublished' => (bool) $item->is_published,
             'createdAt' => $item->created_at?->toISOString(),
             'updatedAt' => $item->updated_at?->toISOString(),
         ];
@@ -271,5 +293,14 @@ class MediaItemController extends Controller
     private function isAudioCategory(string $category): bool
     {
         return strtolower(trim($category)) === 'audio';
+    }
+
+    private function safeAudioOriginalFilename(?UploadedFile $file): string
+    {
+        if (! $file) {
+            return '';
+        }
+
+        return basename($file->getClientOriginalName());
     }
 }
