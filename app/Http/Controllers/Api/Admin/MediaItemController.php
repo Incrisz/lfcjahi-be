@@ -35,7 +35,7 @@ class MediaItemController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $validated = $this->validatePayload($request);
+        $validated = $this->validatePayload($request, null);
         $validated['is_published'] = (bool) ($validated['is_published'] ?? true);
 
         if ($request->hasFile('thumbnail_file')) {
@@ -79,7 +79,7 @@ class MediaItemController extends Controller
         $previousMediaUrl = $item->media_url;
         $previousMediaSourceType = $item->media_source_type;
 
-        $validated = $this->validatePayload($request);
+        $validated = $this->validatePayload($request, $item);
 
         if ($request->hasFile('thumbnail_file')) {
             $this->deleteManagedPublicFile($previousThumbnailUrl);
@@ -145,8 +145,21 @@ class MediaItemController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function validatePayload(Request $request): array
+    private function validatePayload(Request $request, ?MediaItem $existingItem): array
     {
+        $audioUpload = $request->file('audio_file');
+        if ($audioUpload instanceof UploadedFile && ! $audioUpload->isValid()) {
+            $message = $audioUpload->getErrorMessage();
+
+            if (str_contains(strtolower($message), 'exceeds')) {
+                $message .= ' Increase PHP upload_max_filesize/post_max_size and restart the backend server.';
+            }
+
+            throw ValidationException::withMessages([
+                'audio_file' => [$message],
+            ]);
+        }
+
         $request->merge([
             'media_date' => $request->input('media_date', $request->input('mediaDate')),
             'thumbnail_url' => $request->input('thumbnail_url', $request->input('thumbnailUrl')),
@@ -170,7 +183,7 @@ class MediaItemController extends Controller
             'audio_file' => [
                 'nullable',
                 'file',
-                'mimetypes:audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/aac,audio/ogg',
+                'mimes:mp3,wav,m4a,aac,ogg',
                 'max:51200',
             ],
         ]);
@@ -197,13 +210,16 @@ class MediaItemController extends Controller
                 $sourceType = $request->hasFile('audio_file') ? 'file' : 'link';
             }
 
-            if ($sourceType === 'file' && ! $request->hasFile('audio_file') && empty($validated['media_url'])) {
+            $existingMediaUrl = $existingItem?->media_url;
+            $hasMediaUrl = ! empty($validated['media_url']) || ! empty($existingMediaUrl);
+
+            if ($sourceType === 'file' && ! $request->hasFile('audio_file') && ! $hasMediaUrl) {
                 throw ValidationException::withMessages([
                     'audio_file' => ['Audio file is required when source type is file.'],
                 ]);
             }
 
-            if ($sourceType === 'link' && empty($validated['media_url'])) {
+            if ($sourceType === 'link' && ! $hasMediaUrl) {
                 throw ValidationException::withMessages([
                     'media_url' => ['Audio link is required when source type is link.'],
                 ]);
