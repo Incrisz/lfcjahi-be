@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\MediaItem;
 use App\Models\MediaCategory;
 use App\Models\MediaSubcategory;
 use Illuminate\Http\JsonResponse;
@@ -63,12 +64,18 @@ class CategoryController extends Controller
     public function destroy(MediaCategory $category): JsonResponse
     {
         $name = $category->name;
-        $category->delete();
 
-        \App\Models\MediaItem::query()->where('category', $name)->update([
-            'category' => 'Uncategorized',
-            'subcategory' => null,
-        ]);
+        $attachedContentCount = MediaItem::query()
+            ->where('category', $name)
+            ->count();
+
+        if ($attachedContentCount > 0) {
+            return response()->json([
+                'message' => "Cannot delete category '{$name}' because it still has {$attachedContentCount} media item(s). Remove the content first.",
+            ], 422);
+        }
+
+        $category->delete();
 
         return response()->json([
             'message' => 'Category deleted successfully.',
@@ -136,14 +143,20 @@ class CategoryController extends Controller
         $oldName = $subcategory->name;
         $categoryName = $subcategory->category?->name;
 
-        $subcategory->delete();
-
         if ($categoryName) {
-            \App\Models\MediaItem::query()
+            $attachedContentCount = MediaItem::query()
                 ->where('category', $categoryName)
                 ->where('subcategory', $oldName)
-                ->update(['subcategory' => null]);
+                ->count();
+
+            if ($attachedContentCount > 0) {
+                return response()->json([
+                    'message' => "Cannot delete subcategory '{$oldName}' because it still has {$attachedContentCount} media item(s). Remove the content first.",
+                ], 422);
+            }
         }
+
+        $subcategory->delete();
 
         return response()->json([
             'message' => 'Subcategory deleted successfully.',
