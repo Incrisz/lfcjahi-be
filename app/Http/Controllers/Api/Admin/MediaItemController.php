@@ -9,7 +9,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -40,13 +39,13 @@ class MediaItemController extends Controller
 
         if ($request->hasFile('thumbnail_file')) {
             $path = $request->file('thumbnail_file')->store('media-thumbnails', 'public');
-            $validated['thumbnail_url'] = Storage::url($path);
+            $validated['thumbnail_url'] = $this->publicStoragePath($path);
         }
 
         if ($request->hasFile('audio_file')) {
             $originalFilename = $this->safeAudioOriginalFilename($request->file('audio_file'));
             $path = $request->file('audio_file')->storeAs('media-audio', $originalFilename, 'public');
-            $validated['media_url'] = Storage::url($path);
+            $validated['media_url'] = $this->publicStoragePath($path);
             $validated['media_source_type'] = 'file';
         }
 
@@ -84,14 +83,14 @@ class MediaItemController extends Controller
         if ($request->hasFile('thumbnail_file')) {
             $this->deleteManagedPublicFile($previousThumbnailUrl);
             $path = $request->file('thumbnail_file')->store('media-thumbnails', 'public');
-            $validated['thumbnail_url'] = Storage::url($path);
+            $validated['thumbnail_url'] = $this->publicStoragePath($path);
         }
 
         if ($request->hasFile('audio_file')) {
             $this->deleteManagedPublicFile($previousMediaUrl);
             $originalFilename = $this->safeAudioOriginalFilename($request->file('audio_file'));
             $path = $request->file('audio_file')->storeAs('media-audio', $originalFilename, 'public');
-            $validated['media_url'] = Storage::url($path);
+            $validated['media_url'] = $this->publicStoragePath($path);
             $validated['media_source_type'] = 'file';
         } elseif (
             ($validated['media_source_type'] ?? null) !== 'file'
@@ -262,12 +261,19 @@ class MediaItemController extends Controller
             return '';
         }
 
-        if (preg_match('/^https?:\/\//i', $path) === 1) {
-            return $path;
+        if (str_starts_with($path, '/')) {
+            return $this->publicUrl($path);
         }
 
-        if (str_starts_with($path, '/')) {
-            return URL::to($path);
+        if (preg_match('/^https?:\/\//i', $path) === 1) {
+            $parsedPath = (string) parse_url($path, PHP_URL_PATH);
+            $query = (string) parse_url($path, PHP_URL_QUERY);
+
+            if (str_starts_with($parsedPath, '/storage/')) {
+                return $this->publicUrl($parsedPath.($query !== '' ? '?'.$query : ''));
+            }
+
+            return $path;
         }
 
         return $path;
@@ -298,13 +304,39 @@ class MediaItemController extends Controller
             return substr($fileUrl, strlen($prefix));
         }
 
-        $absolutePrefix = rtrim(config('app.url'), '/').$prefix;
-
-        if ($absolutePrefix !== '' && str_starts_with($fileUrl, $absolutePrefix)) {
-            return substr($fileUrl, strlen($absolutePrefix));
+        $parsedPath = (string) parse_url($fileUrl, PHP_URL_PATH);
+        if (str_starts_with($parsedPath, $prefix)) {
+            return substr($parsedPath, strlen($prefix));
         }
 
         return null;
+    }
+
+    private function publicStoragePath(string $path): string
+    {
+        return '/storage/'.ltrim($path, '/');
+    }
+
+    private function publicUrl(string $path): string
+    {
+        $request = request();
+        $normalizedPath = '/'.ltrim($path, '/');
+
+        if (! $request) {
+            return rtrim(config('app.url'), '/').$normalizedPath;
+        }
+
+        $forwardedProto = trim(explode(',', (string) $request->headers->get('x-forwarded-proto', ''))[0] ?? '');
+        $forwardedHost = trim(explode(',', (string) $request->headers->get('x-forwarded-host', ''))[0] ?? '');
+        $forwardedPort = trim(explode(',', (string) $request->headers->get('x-forwarded-port', ''))[0] ?? '');
+
+        $scheme = $forwardedProto !== '' ? $forwardedProto : $request->getScheme();
+        $host = $forwardedHost !== '' ? $forwardedHost : $request->getHost();
+        $port = $forwardedPort !== '' ? (int) $forwardedPort : $request->getPort();
+        $includePort = $port > 0
+            && ! in_array([$scheme, $port], [['http', 80], ['https', 443]], true);
+
+        return $scheme.'://'.$host.($includePort ? ':'.$port : '').$normalizedPath;
     }
 
     private function isAudioCategory(string $category): bool
