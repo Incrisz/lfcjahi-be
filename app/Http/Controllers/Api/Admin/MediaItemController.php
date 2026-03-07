@@ -173,7 +173,7 @@ class MediaItemController extends Controller
             'description' => ['nullable', 'string'],
             'category' => ['required', 'string', 'max:255', Rule::exists('media_categories', 'name')],
             'subcategory' => ['nullable', 'string', 'max:255'],
-            'speaker' => ['nullable', 'string', 'max:255'],
+            'speaker' => ['nullable', 'string', 'max:255', Rule::exists('speakers', 'name')],
             'media_date' => ['nullable', 'date'],
             'thumbnail_url' => ['nullable', 'string', 'max:2048'],
             'thumbnail_file' => ['nullable', 'image', 'max:5120'],
@@ -190,6 +190,7 @@ class MediaItemController extends Controller
 
         $category = $validated['category'];
         $subcategory = trim((string) ($validated['subcategory'] ?? ''));
+        $validated['speaker'] = trim((string) ($validated['speaker'] ?? '')) ?: null;
         $sourceType = $validated['media_source_type'] ?? null;
 
         if ($subcategory !== '') {

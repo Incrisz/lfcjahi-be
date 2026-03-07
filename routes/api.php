@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\BlogPostController;
 use App\Http\Controllers\Api\Admin\CategoryController;
 use App\Http\Controllers\Api\Admin\EventController;
 use App\Http\Controllers\Api\Admin\MediaItemController;
+use App\Http\Controllers\Api\Admin\SpeakerController;
 use App\Http\Controllers\Api\Admin\ThemeSettingController;
 use App\Http\Controllers\Api\PublicMediaController;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +24,7 @@ Route::prefix('admin')->group(function (): void {
 
     Route::apiResource('media', MediaItemController::class);
     Route::patch('media/{id}/publish', [MediaItemController::class, 'updatePublishStatus']);
+    Route::apiResource('speakers', SpeakerController::class)->except(['show']);
     Route::apiResource('events', EventController::class);
     Route::apiResource('blog-posts', BlogPostController::class);
 
