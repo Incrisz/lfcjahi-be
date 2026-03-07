@@ -14,7 +14,7 @@ class ThemeSettingController extends Controller
     {
         $settings = ThemeSetting::query()->firstOrCreate([], [
             'church_name' => 'LFC Jahi',
-            'logo_url' => '/assets/images/logo-1.png',
+            'logo_url' => '/lfc-assets/images/logo-1.png',
             'tagline' => 'Raising Kingdom Voices',
             'primary_color' => '#0a4d68',
             'accent_color' => '#f2994a',

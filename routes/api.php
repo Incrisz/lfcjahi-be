@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\PublicMediaController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('media', [PublicMediaController::class, 'index']);
+Route::get('media/{id}/download', [PublicMediaController::class, 'download']);
 
 Route::prefix('admin')->group(function (): void {
     Route::get('categories', [CategoryController::class, 'index']);
