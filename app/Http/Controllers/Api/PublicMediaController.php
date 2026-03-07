@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PublicMediaController extends Controller
 {
@@ -31,7 +32,7 @@ class PublicMediaController extends Controller
         ]);
     }
 
-    public function download(string $id): BinaryFileResponse|RedirectResponse|Response
+    public function download(string $id): BinaryFileResponse|RedirectResponse|Response|StreamedResponse
     {
         $item = MediaItem::query()
             ->where('is_published', true)
