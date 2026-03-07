@@ -62,9 +62,18 @@ class SpeakerController extends Controller
     public function destroy(Speaker $speaker): JsonResponse
     {
         $name = $speaker->name;
-        $speaker->delete();
 
-        MediaItem::query()->where('speaker', $name)->update(['speaker' => null]);
+        $attachedContentCount = MediaItem::query()
+            ->where('speaker', $name)
+            ->count();
+
+        if ($attachedContentCount > 0) {
+            return response()->json([
+                'message' => "Cannot delete speaker '{$name}' because it still has {$attachedContentCount} media item(s). Remove the content first.",
+            ], 422);
+        }
+
+        $speaker->delete();
 
         return response()->json([
             'message' => 'Speaker deleted successfully.',
