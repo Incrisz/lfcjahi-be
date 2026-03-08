@@ -14,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 
 class MediaItemController extends Controller
 {
+    private const MAX_AUDIO_FILE_SIZE_KB = 204800;
+
     /**
      * Display a listing of the resource.
      */
@@ -183,7 +185,7 @@ class MediaItemController extends Controller
                 'nullable',
                 'file',
                 'mimes:mp3,wav,m4a,aac,ogg',
-                'max:51200',
+                'max:' . self::MAX_AUDIO_FILE_SIZE_KB,
             ],
         ]);
 
