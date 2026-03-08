@@ -183,7 +183,14 @@ class PublicMediaController extends Controller
     {
         $extension = pathinfo($publicStoragePath, PATHINFO_EXTENSION);
         $fallbackName = basename($publicStoragePath);
-        $slug = Str::slug($item->title ?: 'message');
+        $date = $item->media_date?->format('Y-m-d')
+            ?: $item->created_at?->format('Y-m-d')
+            ?: now()->format('Y-m-d');
+        $slug = Str::slug(implode(' ', array_filter([
+            $item->title ?: 'message',
+            $item->speaker ?: 'lfc-jahi',
+            $date,
+        ])));
 
         if (! $slug) {
             return $fallbackName;
