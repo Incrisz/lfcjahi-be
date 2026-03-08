@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\MediaSubcategory;
 use App\Models\MediaItem;
+use App\Models\Speaker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -25,9 +26,12 @@ class MediaItemController extends Controller
             ->orderByDesc('media_date')
             ->orderByDesc('created_at')
             ->get();
+        $speakerImagePaths = $this->speakerImagePathsForItems($items);
 
         return response()->json([
-            'data' => $items->map(fn (MediaItem $item): array => $this->serializeItem($item))->values(),
+            'data' => $items->map(
+                fn (MediaItem $item): array => $this->serializeItem($item, $speakerImagePaths[$item->speaker ?? ''] ?? null)
+            )->values(),
         ]);
     }
 
@@ -54,7 +58,7 @@ class MediaItemController extends Controller
         $item = MediaItem::create($validated);
 
         return response()->json([
-            'data' => $this->serializeItem($item),
+            'data' => $this->serializeItem($item, $this->speakerImagePathForName($item->speaker)),
         ], 201);
     }
 
@@ -66,7 +70,7 @@ class MediaItemController extends Controller
         $item = MediaItem::query()->findOrFail($id);
 
         return response()->json([
-            'data' => $this->serializeItem($item),
+            'data' => $this->serializeItem($item, $this->speakerImagePathForName($item->speaker)),
         ]);
     }
 
@@ -105,7 +109,7 @@ class MediaItemController extends Controller
         $item->save();
 
         return response()->json([
-            'data' => $this->serializeItem($item),
+            'data' => $this->serializeItem($item, $this->speakerImagePathForName($item->speaker)),
         ]);
     }
 
@@ -120,7 +124,7 @@ class MediaItemController extends Controller
         $item->save();
 
         return response()->json([
-            'data' => $this->serializeItem($item),
+            'data' => $this->serializeItem($item, $this->speakerImagePathForName($item->speaker)),
         ]);
     }
 
@@ -238,8 +242,10 @@ class MediaItemController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function serializeItem(MediaItem $item): array
+    private function serializeItem(MediaItem $item, ?string $speakerImagePath = null): array
     {
+        $resolvedThumbnailPath = $item->thumbnail_url ?: $speakerImagePath;
+
         return [
             'id' => (string) $item->id,
             'title' => $item->title,
@@ -248,7 +254,9 @@ class MediaItemController extends Controller
             'subcategory' => $item->subcategory ?? '',
             'speaker' => $item->speaker ?? '',
             'mediaDate' => $item->media_date?->format('Y-m-d') ?? '',
-            'thumbnailUrl' => $this->absoluteUrl($item->thumbnail_url),
+            'thumbnailUrl' => $this->absoluteUrl($resolvedThumbnailPath),
+            'customThumbnailUrl' => $this->absoluteUrl($item->thumbnail_url),
+            'speakerImageUrl' => $this->absoluteUrl($speakerImagePath),
             'mediaUrl' => $this->absoluteUrl($item->media_url),
             'mediaSourceType' => $item->media_source_type ?? '',
             'isPublished' => (bool) $item->is_published,
@@ -317,6 +325,47 @@ class MediaItemController extends Controller
     private function publicStoragePath(string $path): string
     {
         return '/storage/'.ltrim($path, '/');
+    }
+
+    /**
+     * @param iterable<MediaItem> $items
+     * @return array<string, string>
+     */
+    private function speakerImagePathsForItems(iterable $items): array
+    {
+        $names = [];
+
+        foreach ($items as $item) {
+            $name = trim((string) ($item->speaker ?? ''));
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        $names = array_values(array_unique($names));
+        if ($names === []) {
+            return [];
+        }
+
+        return Speaker::query()
+            ->whereIn('name', $names)
+            ->whereNotNull('image_url')
+            ->get(['name', 'image_url'])
+            ->filter(fn (Speaker $speaker): bool => trim((string) $speaker->image_url) !== '')
+            ->mapWithKeys(fn (Speaker $speaker): array => [$speaker->name => (string) $speaker->image_url])
+            ->all();
+    }
+
+    private function speakerImagePathForName(?string $speakerName): ?string
+    {
+        $name = trim((string) $speakerName);
+        if ($name === '') {
+            return null;
+        }
+
+        return Speaker::query()
+            ->where('name', $name)
+            ->value('image_url');
     }
 
     private function publicUrl(string $path): string

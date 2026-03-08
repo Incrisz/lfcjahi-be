@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
+use App\Models\Speaker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
@@ -26,9 +27,12 @@ class PublicMediaController extends Controller
             ->orderByDesc('media_date')
             ->orderByDesc('created_at')
             ->get();
+        $speakerImagePaths = $this->speakerImagePathsForItems($items);
 
         return response()->json([
-            'data' => $items->map(fn (MediaItem $item): array => $this->serializeItem($item))->values(),
+            'data' => $items->map(
+                fn (MediaItem $item): array => $this->serializeItem($item, $speakerImagePaths[$item->speaker ?? ''] ?? null)
+            )->values(),
         ]);
     }
 
@@ -58,8 +62,10 @@ class PublicMediaController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function serializeItem(MediaItem $item): array
+    private function serializeItem(MediaItem $item, ?string $speakerImagePath = null): array
     {
+        $resolvedThumbnailPath = $item->thumbnail_url ?: $speakerImagePath;
+
         return [
             'id' => (string) $item->id,
             'title' => $item->title,
@@ -68,7 +74,8 @@ class PublicMediaController extends Controller
             'subcategory' => $item->subcategory ?? '',
             'speaker' => $item->speaker ?? '',
             'mediaDate' => $item->media_date?->format('Y-m-d') ?? '',
-            'thumbnailUrl' => $this->absoluteUrl($item->thumbnail_url),
+            'thumbnailUrl' => $this->absoluteUrl($resolvedThumbnailPath),
+            'speakerImageUrl' => $this->absoluteUrl($speakerImagePath),
             'mediaUrl' => $this->absoluteUrl($item->media_url),
             'downloadUrl' => $this->publicUrl('/api/media/'.$item->id.'/download'),
             'mediaSourceType' => $item->media_source_type ?? '',
@@ -76,6 +83,35 @@ class PublicMediaController extends Controller
             'createdAt' => $item->created_at?->toISOString(),
             'updatedAt' => $item->updated_at?->toISOString(),
         ];
+    }
+
+    /**
+     * @param iterable<MediaItem> $items
+     * @return array<string, string>
+     */
+    private function speakerImagePathsForItems(iterable $items): array
+    {
+        $names = [];
+
+        foreach ($items as $item) {
+            $name = trim((string) ($item->speaker ?? ''));
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        $names = array_values(array_unique($names));
+        if ($names === []) {
+            return [];
+        }
+
+        return Speaker::query()
+            ->whereIn('name', $names)
+            ->whereNotNull('image_url')
+            ->get(['name', 'image_url'])
+            ->filter(fn (Speaker $speaker): bool => trim((string) $speaker->image_url) !== '')
+            ->mapWithKeys(fn (Speaker $speaker): array => [$speaker->name => (string) $speaker->image_url])
+            ->all();
     }
 
     private function absoluteUrl(?string $path): string

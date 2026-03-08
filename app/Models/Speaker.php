@@ -8,5 +8,6 @@ class Speaker extends Model
 {
     protected $fillable = [
         'name',
+        'image_url',
     ];
 }
