@@ -49,10 +49,14 @@ class PublicMediaController extends Controller
 
         $publicStoragePath = $this->extractPublicStoragePath($mediaUrl);
         if ($publicStoragePath && Storage::disk('public')->exists($publicStoragePath)) {
+            MediaItem::withoutTimestamps(fn () => $item->increment('download_count'));
+
             return Storage::disk('public')->download($publicStoragePath, $this->downloadFilename($item, $publicStoragePath));
         }
 
         if (preg_match('/^https?:\/\//i', $mediaUrl) === 1) {
+            MediaItem::withoutTimestamps(fn () => $item->increment('download_count'));
+
             return redirect()->away($mediaUrl);
         }
 
@@ -78,6 +82,7 @@ class PublicMediaController extends Controller
             'speakerImageUrl' => $this->absoluteUrl($speakerImagePath),
             'mediaUrl' => $this->absoluteUrl($item->media_url),
             'downloadUrl' => $this->publicUrl('/api/media/'.$item->id.'/download'),
+            'downloadCount' => (int) ($item->download_count ?? 0),
             'mediaSourceType' => $item->media_source_type ?? '',
             'isPublished' => (bool) $item->is_published,
             'createdAt' => $item->created_at?->toISOString(),

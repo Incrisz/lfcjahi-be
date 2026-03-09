@@ -16,11 +16,13 @@ class MediaItem extends Model
         'thumbnail_url',
         'media_url',
         'media_source_type',
+        'download_count',
         'is_published',
     ];
 
     protected $casts = [
         'media_date' => 'date',
+        'download_count' => 'integer',
         'is_published' => 'boolean',
     ];
 }

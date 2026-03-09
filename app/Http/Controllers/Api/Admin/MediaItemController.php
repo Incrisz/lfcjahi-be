@@ -258,6 +258,7 @@ class MediaItemController extends Controller
             'customThumbnailUrl' => $this->absoluteUrl($item->thumbnail_url),
             'speakerImageUrl' => $this->absoluteUrl($speakerImagePath),
             'mediaUrl' => $this->absoluteUrl($item->media_url),
+            'downloadCount' => (int) ($item->download_count ?? 0),
             'mediaSourceType' => $item->media_source_type ?? '',
             'isPublished' => (bool) $item->is_published,
             'createdAt' => $item->created_at?->toISOString(),
