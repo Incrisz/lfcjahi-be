@@ -120,7 +120,12 @@ class MediaItemController extends Controller
             'is_published' => ['required', 'boolean'],
         ]);
 
-        $item->is_published = (bool) $validated['is_published'];
+        $nextPublished = (bool) $validated['is_published'];
+        if ($nextPublished && empty($item->media_url)) {
+            $nextPublished = false;
+        }
+
+        $item->is_published = $nextPublished;
         $item->save();
 
         return response()->json([
@@ -218,8 +223,15 @@ class MediaItemController extends Controller
 
             $existingMediaUrl = $existingItem?->media_url;
             $hasMediaUrl = ! empty($validated['media_url']) || ! empty($existingMediaUrl);
+            $hasAudioUpload = $request->hasFile('audio_file');
 
-            if ($sourceType === 'file' && ! $request->hasFile('audio_file') && ! $hasMediaUrl) {
+            if (! $hasMediaUrl && ! $hasAudioUpload) {
+                $validated['is_published'] = false;
+                $validated['media_source_type'] = null;
+                return $validated;
+            }
+
+            if ($sourceType === 'file' && ! $hasAudioUpload && ! $hasMediaUrl) {
                 throw ValidationException::withMessages([
                     'audio_file' => ['Audio file is required when source type is file.'],
                 ]);
