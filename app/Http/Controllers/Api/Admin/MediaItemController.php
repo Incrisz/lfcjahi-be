@@ -199,12 +199,12 @@ class MediaItemController extends Controller
         $sourceType = $validated['media_source_type'] ?? null;
 
         if ($subcategory !== '') {
-            $subcategoryExists = MediaSubcategory::query()
+            $subcategoryRecord = MediaSubcategory::query()
+                ->with('category')
                 ->where('name', $subcategory)
-                ->whereHas('category', fn ($query) => $query->where('name', $category))
-                ->exists();
+                ->first();
 
-            if (! $subcategoryExists) {
+            if ($subcategoryRecord && $subcategoryRecord->category?->name !== $category) {
                 throw ValidationException::withMessages([
                     'subcategory' => ['Selected subcategory does not belong to the selected category.'],
                 ]);
