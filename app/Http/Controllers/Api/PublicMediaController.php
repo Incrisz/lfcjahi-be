@@ -84,9 +84,13 @@ class PublicMediaController extends Controller
             $speaker !== '' ? 'by '.$speaker : null,
             $formattedDate !== '' ? 'on '.$formattedDate : null,
         ]);
+        $metaTitle = implode(' | ', array_filter([
+            $title !== '' ? $title : 'Audio Message',
+            $speaker !== '' ? $speaker : null,
+        ]));
 
         return view('message-share', [
-            'title' => $title !== '' ? $title.' | LFC-JAHI MEDIA' : 'Audio Message | LFC-JAHI MEDIA',
+            'title' => $metaTitle !== '' ? $metaTitle : 'Audio Message',
             'description' => implode(' ', $descriptionParts).'. Listen and download the message from LFC Jahi.',
             'image' => $payload['thumbnailUrl'] ?: $payload['speakerImageUrl'] ?: $this->frontendAssetUrl('/images/og-image.jpg'),
             'shareUrl' => $this->publicUrl('/messages/'.$item->id),

@@ -4,7 +4,9 @@
     <meta charset="utf-8">
     <title>{{ $title }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="title" content="{{ $title }}">
     <meta name="description" content="{{ $description }}">
+    <meta name="image" content="{{ $image }}">
     <link rel="canonical" href="{{ $shareUrl }}">
 
     <meta property="og:type" content="article">
@@ -13,6 +15,7 @@
     <meta property="og:description" content="{{ $description }}">
     <meta property="og:url" content="{{ $shareUrl }}">
     <meta property="og:image" content="{{ $image }}">
+    <meta property="og:image:secure_url" content="{{ $image }}">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ $title }}">
