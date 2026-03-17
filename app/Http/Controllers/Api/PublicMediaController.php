@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
 use App\Models\Speaker;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -63,6 +65,38 @@ class PublicMediaController extends Controller
         abort(404);
     }
 
+    public function share(string $id): View
+    {
+        $item = MediaItem::query()
+            ->where('is_published', true)
+            ->findOrFail($id);
+
+        $speakerImagePath = $this->speakerImagePathsForItems([$item])[$item->speaker ?? ''] ?? null;
+        $payload = $this->serializeItem($item, $speakerImagePath);
+        $title = trim((string) ($payload['title'] ?? 'Audio Message'));
+        $speaker = trim((string) ($payload['speaker'] ?? 'LFC Jahi'));
+        $service = trim((string) ($payload['subcategory'] ?? 'Service'));
+        $date = trim((string) ($payload['mediaDate'] ?? ''));
+        $formattedDate = $date !== '' ? Carbon::parse($date)->format('F j, Y') : '';
+        $descriptionParts = array_filter([
+            $title !== '' ? $title : 'Audio Message',
+            $service !== '' ? $service : null,
+            $speaker !== '' ? 'by '.$speaker : null,
+            $formattedDate !== '' ? 'on '.$formattedDate : null,
+        ]);
+
+        return view('message-share', [
+            'title' => $title !== '' ? $title.' | LFC-JAHI MEDIA' : 'Audio Message | LFC-JAHI MEDIA',
+            'description' => implode(' ', $descriptionParts).'. Listen and download the message from LFC Jahi.',
+            'image' => $payload['thumbnailUrl'] ?: $payload['speakerImageUrl'] ?: $this->frontendAssetUrl('/images/og-image.jpg'),
+            'shareUrl' => $this->publicUrl('/messages/'.$item->id),
+            'frontendUrl' => $this->frontendMessageUrl((string) $item->id),
+            'speaker' => $speaker,
+            'service' => $service,
+            'date' => $formattedDate,
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -82,6 +116,7 @@ class PublicMediaController extends Controller
             'speakerImageUrl' => $this->absoluteUrl($speakerImagePath),
             'mediaUrl' => $this->absoluteUrl($item->media_url),
             'downloadUrl' => $this->publicUrl('/api/media/'.$item->id.'/download'),
+            'shareUrl' => $this->publicUrl('/messages/'.$item->id),
             'downloadCount' => (int) ($item->download_count ?? 0),
             'mediaSourceType' => $item->media_source_type ?? '',
             'isPublished' => (bool) $item->is_published,
@@ -182,6 +217,18 @@ class PublicMediaController extends Controller
             && ! in_array([$scheme, $port], [['http', 80], ['https', 443]], true);
 
         return $scheme.'://'.$host.($includePort ? ':'.$port : '').$normalizedPath;
+    }
+
+    private function frontendMessageUrl(string $id): string
+    {
+        $baseUrl = rtrim((string) config('app.frontend_url', 'https://lfcjahi.com'), '/');
+
+        return $baseUrl.'/single-message.html?id='.urlencode($id);
+    }
+
+    private function frontendAssetUrl(string $path): string
+    {
+        return rtrim((string) config('app.frontend_url', 'https://lfcjahi.com'), '/').'/'.ltrim($path, '/');
     }
 
     private function downloadFilename(MediaItem $item, string $publicStoragePath): string
