@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -49,8 +50,8 @@ class MediaItemController extends Controller
         }
 
         if ($request->hasFile('audio_file')) {
-            $originalFilename = $this->safeAudioOriginalFilename($request->file('audio_file'));
-            $path = $request->file('audio_file')->storeAs('media-audio', $originalFilename, 'public');
+            $filename = $this->buildManagedAudioFilename($request->file('audio_file'));
+            $path = $request->file('audio_file')->storeAs('media-audio', $filename, 'public');
             $validated['media_url'] = $this->publicStoragePath($path);
             $validated['media_source_type'] = 'file';
         }
@@ -94,8 +95,8 @@ class MediaItemController extends Controller
 
         if ($request->hasFile('audio_file')) {
             $this->deleteManagedPublicFile($previousMediaUrl);
-            $originalFilename = $this->safeAudioOriginalFilename($request->file('audio_file'));
-            $path = $request->file('audio_file')->storeAs('media-audio', $originalFilename, 'public');
+            $filename = $this->buildManagedAudioFilename($request->file('audio_file'));
+            $path = $request->file('audio_file')->storeAs('media-audio', $filename, 'public');
             $validated['media_url'] = $this->publicStoragePath($path);
             $validated['media_source_type'] = 'file';
         } elseif (
@@ -198,8 +199,14 @@ class MediaItemController extends Controller
             ],
         ]);
 
+        $validated['title'] = trim((string) $validated['title']);
+        $validated['description'] = array_key_exists('description', $validated)
+            ? trim((string) ($validated['description'] ?? ''))
+            : null;
+        $validated['category'] = trim((string) $validated['category']);
         $category = $validated['category'];
         $subcategory = trim((string) ($validated['subcategory'] ?? ''));
+        $validated['subcategory'] = $subcategory !== '' ? $subcategory : null;
         $validated['speaker'] = trim((string) ($validated['speaker'] ?? '')) ?: null;
         $sourceType = $validated['media_source_type'] ?? null;
 
@@ -228,25 +235,22 @@ class MediaItemController extends Controller
             if (! $hasMediaUrl && ! $hasAudioUpload) {
                 $validated['is_published'] = false;
                 $validated['media_source_type'] = null;
-                return $validated;
-            }
-
-            if ($sourceType === 'file' && ! $hasAudioUpload && ! $hasMediaUrl) {
+            } elseif ($sourceType === 'file' && ! $hasAudioUpload && ! $hasMediaUrl) {
                 throw ValidationException::withMessages([
                     'audio_file' => ['Audio file is required when source type is file.'],
                 ]);
-            }
-
-            if ($sourceType === 'link' && ! $hasMediaUrl) {
+            } elseif ($sourceType === 'link' && ! $hasMediaUrl) {
                 throw ValidationException::withMessages([
                     'media_url' => ['Audio link is required when source type is link.'],
                 ]);
+            } else {
+                $validated['media_source_type'] = $sourceType;
             }
-
-            $validated['media_source_type'] = $sourceType;
         } else {
             $validated['media_source_type'] = null;
         }
+
+        $this->ensureNoDuplicateMediaItem($validated, $existingItem);
 
         return $validated;
     }
@@ -408,6 +412,47 @@ class MediaItemController extends Controller
         return strtolower(trim($category)) === 'audio';
     }
 
+    /**
+     * @param array<string, mixed> $validated
+     */
+    private function ensureNoDuplicateMediaItem(array $validated, ?MediaItem $existingItem): void
+    {
+        $duplicateQuery = MediaItem::query()
+            ->whereRaw('LOWER(title) = ?', [mb_strtolower((string) $validated['title'])])
+            ->where('category', $validated['category']);
+
+        $speaker = $validated['speaker'] ?? null;
+        if ($speaker === null) {
+            $duplicateQuery->whereNull('speaker');
+        } else {
+            $duplicateQuery->where('speaker', $speaker);
+        }
+
+        $subcategory = $validated['subcategory'] ?? null;
+        if ($subcategory === null) {
+            $duplicateQuery->whereNull('subcategory');
+        } else {
+            $duplicateQuery->where('subcategory', $subcategory);
+        }
+
+        $mediaDate = $validated['media_date'] ?? null;
+        if ($mediaDate === null || $mediaDate === '') {
+            $duplicateQuery->whereNull('media_date');
+        } else {
+            $duplicateQuery->whereDate('media_date', $mediaDate);
+        }
+
+        if ($existingItem) {
+            $duplicateQuery->whereKeyNot($existingItem->getKey());
+        }
+
+        if ($duplicateQuery->exists()) {
+            throw ValidationException::withMessages([
+                'title' => ['A media item with the same title, speaker, service, category, and date already exists.'],
+            ]);
+        }
+    }
+
     private function safeAudioOriginalFilename(?UploadedFile $file): string
     {
         if (! $file) {
@@ -415,5 +460,20 @@ class MediaItemController extends Controller
         }
 
         return basename($file->getClientOriginalName());
+    }
+
+    private function buildManagedAudioFilename(?UploadedFile $file): string
+    {
+        $originalName = pathinfo($this->safeAudioOriginalFilename($file), PATHINFO_FILENAME);
+        $extension = strtolower((string) ($file?->getClientOriginalExtension() ?: $file?->extension() ?: ''));
+        $slug = Str::slug($originalName);
+
+        if ($slug === '') {
+            $slug = 'audio';
+        }
+
+        $suffix = now()->format('YmdHis').'-'.Str::lower(Str::random(8));
+
+        return $slug.'-'.$suffix.($extension !== '' ? '.'.$extension : '');
     }
 }
